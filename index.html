@@ -634,6 +634,1047 @@
       Taken · AI Location Analysis
     </div>
 
+    <h1><em>Taken</em></h1>
+    <p class="tagline" style="font-size:17px; color: var(--ink); margin-bottom:6px; font-weight:400;">Where was this photo taken?</p>
+    <p class="tagline">Upload any image · AI reads the visual clues · Pinpoints the location</p>
+  </header>
+
+  <!-- Upload -->
+  <div class="upload-section" id="uploadSection">
+    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      <span class="drop-icon">🗺️</span>
+      <p class="drop-title">Drop your photo here</p>
+      <p class="drop-sub">or click to browse · JPG, PNG, WEBP · up to 20MB</p>
+    </div>
+    <input type="file" id="fileInput" accept="image/*">
+  </div>
+
+  <!-- Preview -->
+  <div class="preview-wrap" id="previewWrap">
+    <img id="previewImg" src="" alt="Uploaded photo">
+    <span class="img-overlay-badge" id="filenameBadge">photo.jpg</span>
+    <button class="change-btn" onclick="resetAll()">✕ Change</button>
+  </div>
+
+  <!-- Analyze button -->
+  <button class="analyze-btn" id="analyzeBtn" disabled onclick="analyzeImage()">
+    <span>Identify Location</span>
+    <span class="btn-arrow">→</span>
+  </button>
+
+  <!-- Error -->
+  <div class="error-box" id="errorBox"></div>
+
+  <!-- Loading -->
+  <div class="loading-state" id="loadingState">
+    <div class="loader-track"><div class="loader-bar"></div></div>
+    <p class="loading-text" id="loadingText">Scanning visual clues…</p>
+  </div>
+
+  <!-- Results -->
+  <div class="results-panel" id="resultsPanel">
+    <div class="results-header">
+      <span class="results-label">— Analysis Result —</span>
+      <span class="confidence-chip" id="confidenceChip"></span>
+    </div>
+
+    <!-- Main location card -->
+    <div class="location-card">
+      <p class="loc-eyebrow">📍 Identified Location</p>
+      <h2 class="loc-name" id="locName">—</h2>
+      <p class="loc-country" id="locCountry">—</p>
+      <div class="coords-row">
+        <div class="coord-item">
+          <span class="coord-label">Latitude</span>
+          <span class="coord-val" id="locLat">—</span>
+        </div>
+        <div class="coord-item">
+          <span class="coord-label">Longitude</span>
+          <span class="coord-val" id="locLng">—</span>
+        </div>
+        <div class="coord-item">
+          <span class="coord-label">Continent</span>
+          <span class="coord-val" id="locContinent">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detail grid -->
+    <div class="detail-grid">
+      <div class="detail-card">
+        <p class="detail-label">🌐 Region / State</p>
+        <p class="detail-value" id="locRegion">—</p>
+      </div>
+      <div class="detail-card">
+        <p class="detail-label">🌤 Climate Type</p>
+        <p class="detail-value" id="locClimate">—</p>
+      </div>
+      <div class="detail-card">
+        <p class="detail-label">🏙 Setting Type</p>
+        <p class="detail-value" id="locSetting">—</p>
+      </div>
+      <div class="detail-card">
+        <p class="detail-label">📅 Estimated Time</p>
+        <p class="detail-value" id="locTime">—</p>
+      </div>
+      <div class="detail-card" id="landmarkCard" style="display:none; grid-column: 1/-1; border-color: var(--gold);">
+        <p class="detail-label">🏛 Identified Landmark</p>
+        <p class="detail-value" id="locLandmark" style="color: var(--rust); font-weight:600;">—</p>
+      </div>
+    </div>
+    <p id="confReason" style="font-size:13px; color:var(--mist); font-family:'DM Mono',monospace; margin-bottom:16px; font-style:italic;"></p>
+
+    <!-- Visual clues -->
+    <div class="clues-section">
+      <p class="clues-title">🔍 Visual Clues Used</p>
+      <div id="cluesList"></div>
+    </div>
+
+    <!-- Eliminated regions -->
+    <div class="clues-section" id="elimSection" style="display:none; background:#faf6f4; border-color:#e8d8d0;">
+      <p class="clues-title" style="color:#9b7060;">✕ Regions Ruled Out</p>
+      <div id="elimList"></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Narrative -->
+    <div class="narrative-section">
+      <p class="narrative-text" id="locNarrative">—</p>
+    </div>
+
+    <div class="action-row">
+      <a class="map-link-btn" id="mapLink" href="#" target="_blank">🗺 Open in Maps</a>
+      <button class="try-again-btn" onclick="resetAll()">↺ Try another photo</button>
+    </div>
+  </div>
+
+  <footer>
+    <p class="footer-text">Taken · Powered by Claude Vision AI · Results are AI estimates and may not be exact</p>
+  </footer>
+</div>
+
+<script>
+let currentFile = null;
+let currentBase64 = null;
+
+// Drag & drop
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+
+document.getElementById('fileInput').addEventListener('change', e => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+function handleFile(file) {
+  currentFile = file;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    currentBase64 = ev.target.result.split(',')[1];
+    document.getElementById('previewImg').src = ev.target.result;
+    document.getElementById('filenameBadge').textContent = file.name;
+    document.getElementById('previewWrap').classList.add('show');
+    document.getElementById('uploadSection').style.display = 'none';
+    document.getElementById('analyzeBtn').disabled = false;
+    document.getElementById('resultsPanel').classList.remove('show');
+    document.getElementById('errorBox').classList.remove('show');
+  };
+  reader.readAsDataURL(file);
+}
+
+function resetAll() {
+  currentFile = null;
+  currentBase64 = null;
+  document.getElementById('previewWrap').classList.remove('show');
+  document.getElementById('uploadSection').style.display = 'block';
+  document.getElementById('analyzeBtn').disabled = true;
+  document.getElementById('resultsPanel').classList.remove('show');
+  document.getElementById('errorBox').classList.remove('show');
+  document.getElementById('loadingState').classList.remove('show');
+  document.getElementById('fileInput').value = '';
+}
+
+const loadingMessages = [
+  'Scanning every pixel for clues…',
+  'Identifying architecture style…',
+  'Analyzing vegetation & terrain…',
+  'Reading signs, scripts & markings…',
+  'Checking sun angle & shadows…',
+  'Cross-referencing geographic features…',
+  'Eliminating unlikely regions…',
+  'Pinpointing coordinates…',
+];
+
+let msgInterval = null;
+
+function startLoadingMessages() {
+  let i = 0;
+  document.getElementById('loadingText').textContent = loadingMessages[0];
+  msgInterval = setInterval(() => {
+    i = (i + 1) % loadingMessages.length;
+    document.getElementById('loadingText').textContent = loadingMessages[i];
+  }, 2200);
+}
+
+function stopLoadingMessages() {
+  clearInterval(msgInterval);
+}
+
+// ── PASS 1 PROMPT: forensic visual inventory ─────────────────────────────
+const INVENTORY_PROMPT = `You are a forensic visual analyst. Your ONLY job right now is to catalogue EVERY visible detail in this photo with extreme precision. Do NOT guess the location yet — just describe what you see.
+
+List everything under these categories. Be exhaustive and specific:
+
+1. TEXT & SIGNAGE: Quote every visible word, letter, number, or character you can read — street signs, shop names, banners, posters, stickers, license plates, utility labels, graffiti. Note the script/language/alphabet. Note license plate background color, text color, and any code visible.
+
+2. LOGOS & BRANDS: Every brand, logo, symbol — fuel stations, telecom, retail stores, banks, government agencies, NGOs.
+
+3. VEHICLES: Make, model if determinable, license plate format (background color + text color), any visible plate region code.
+
+4. ARCHITECTURE: Building materials, roof style, window/door style, balcony type, drainage infrastructure, street furniture (lampposts, bollards, benches).
+
+5. VEGETATION: Name every plant species you can identify — palm type, tree type, shrub, ground cover. Note if oil palms or rubber trees are visible.
+
+6. TERRAIN & SKY: Ground surface, topography, haze density, cloud type, sun position.
+
+7. PEOPLE: Clothing styles, any uniforms, fashion.
+
+8. INFRASTRUCTURE: Road marking colors, road surface type, utility poles, overhead cables, drain style.
+
+Respond in plain structured text with those 8 category headers. Be as precise as possible. Do not conclude a location.`;
+
+// ── PASS 2 PROMPT: deduction from inventory ───────────────────────────────
+function buildDeductionPrompt(inventory) {
+  return `You are the world's most accurate geolocation expert. Using the visual inventory below, determine EXACTLY where this photo was taken.
+
+=== VISUAL INVENTORY ===
+${inventory}
+=== END INVENTORY ===
+
+Now apply this deduction framework:
+
+DEFINITIVE COUNTRY MARKERS (trust these above all else):
+• LICENSE PLATES:
+  - BLACK background + WHITE text = INDONESIA (never Malaysia, never Brunei)
+  - WHITE background + BLACK text = Malaysia or Singapore
+  - YELLOW background = Brunei or some Malaysian states
+  - BM/BN region code = Pekanbaru/Riau, Indonesia
+  - B=Jakarta, D=Bandung, L=Surabaya, KB=Kalimantan Barat, DA=Kalimantan Selatan
+
+• FUEL STATIONS:
+  - Pertamina (red/green/blue logo) = INDONESIA ONLY, no exceptions
+  - Petronas (twin tower logo, green) = Malaysia/Brunei only
+  - Shell = anywhere
+
+• RETAIL / CONVENIENCE:
+  - Indomaret or Alfamart = INDONESIA ONLY
+  - 99 Speedmart, Mydin, KK Mart = Malaysia only
+
+• TELECOM:
+  - Telkomsel, Indosat, XL, Tri, Smartfren = Indonesia
+  - Celcom, Maxis, Digi, U Mobile = Malaysia
+  - DST = Brunei only
+
+• GOVERNMENT SIGNS:
+  - "Pemerintah Kota / Kab", "Dinas", "Kecamatan", "Kelurahan", "PLN", "PDAM", "RSUD", "Puskesmas" = Indonesia
+  - "Majlis Perbandaran", "Jabatan", "JKR", "Kementerian" (Malaysian spelling) = Malaysia
+
+• CURRENCY / PRICES:
+  - "Rp" or "IDR" = Indonesia
+  - "RM" = Malaysia
+  - "B$" = Brunei
+
+• FOOD / CULTURE MARKERS:
+  - "Nasi Padang", "Mie Ayam", "Bakso", "Soto", "Warung", "Ojek", "Angkot" = Indonesia
+  - "Kopitiam" = Malaysia/Singapore (though also used in some Indonesian cities)
+  - "Minang" or "Padang" cuisine = Sumatran/Indonesian origin
+
+STEP 1 — CONFIRM COUNTRY using definitive markers above. If any single definitive marker is present (plate color, Pertamina, Indomaret, government sign), lock in the country immediately.
+
+STEP 2 — CONFIRM REGION within that country using terrain, regional plate codes, architecture style, vegetation.
+
+STEP 3 — PEKANBARU CHECK: If country = Indonesia and terrain = flat lowland Sumatra with tropical haze and BM/BN plates or Riau province markers → answer is Pekanbaru or nearby Riau area.
+
+STEP 4 — SELF-AUDIT: Before writing your answer, explicitly state:
+a) "The country is ___ because I can see ___"
+b) "It is NOT Malaysia/Brunei because ___"
+c) "The city/region is ___ because ___"
+
+STEP 5 — OUTPUT valid JSON only. No markdown fences. No extra text:
+{
+  "location_name": "most specific place (neighborhood/landmark/street, city)",
+  "country": "country name",
+  "region": "province / state / prefecture",
+  "continent": "continent",
+  "latitude": "4 decimal places",
+  "longitude": "4 decimal places",
+  "confidence": "high|medium|low",
+  "confidence_reason": "which specific marker made the country/city certain",
+  "climate": "Köppen classification + description e.g. Tropical rainforest (Af)",
+  "setting": "urban|suburban|rural|wilderness|coastal|mountain|agricultural",
+  "estimated_time": "time of day and season with brief reasoning",
+  "landmark": "specific landmark name if recognizable, else null",
+  "clues": [
+    "MOST DEFINITIVE clue (e.g. 'Black license plate with white text = Indonesia')",
+    "Second strongest clue",
+    "Third clue",
+    "Fourth clue",
+    "Fifth clue",
+    "Sixth clue",
+    "Seventh clue"
+  ],
+  "eliminated_regions": [
+    "Malaysia — ruled out because [exact reason from inventory]",
+    "Brunei — ruled out because [exact reason from inventory]"
+  ],
+  "narrative": "3-sentence expert analysis: (1) what definitive marker locked in the country, (2) what narrowed it to the city/region, (3) final conclusion with confidence."
+}`;
+}
+
+async function analyzeImage() {
+  if (!currentBase64) return;
+
+  document.getElementById('analyzeBtn').disabled = true;
+  document.getElementById('loadingState').classList.add('show');
+  document.getElementById('resultsPanel').classList.remove('show');
+  document.getElementById('errorBox').classList.remove('show');
+  startLoadingMessages();
+
+  try {
+    // ── PASS 1: Visual inventory ──────────────────────────────────────────
+    document.getElementById('loadingText').textContent = 'Pass 1/2 — Inventorying visual clues…';
+
+    const pass1 = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 2000,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: currentFile.type || 'image/jpeg', data: currentBase64 }
+            },
+            { type: 'text', text: INVENTORY_PROMPT }
+          ]
+        }]
+      })
+    });
+
+    const pass1Data = await pass1.json();
+    if (!pass1.ok || pass1Data.error) throw new Error(pass1Data.error?.message || 'Pass 1 failed');
+    const inventory = pass1Data.content.map(b => b.text || '').join('').trim();
+
+    // ── PASS 2: Location deduction with extended thinking ─────────────────
+    document.getElementById('loadingText').textContent = 'Pass 2/2 — Deducing exact location…';
+
+    const pass2 = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 18000,
+        thinking: { type: 'enabled', budget_tokens: 12000 },
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: { type: 'base64', media_type: currentFile.type || 'image/jpeg', data: currentBase64 }
+              },
+              { type: 'text', text: INVENTORY_PROMPT }
+            ]
+          },
+          {
+            role: 'assistant',
+            content: inventory
+          },
+          {
+            role: 'user',
+            content: buildDeductionPrompt(inventory)
+          }
+        ]
+      })
+    });
+
+    const pass2Data = await pass2.json();
+    stopLoadingMessages();
+    document.getElementById('loadingState').classList.remove('show');
+
+    if (!pass2.ok || pass2Data.error) throw new Error(pass2Data.error?.message || 'Pass 2 failed');
+
+    const rawText = pass2Data.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text || '')
+      .join('');
+    const clean = rawText.replace(/```json|```/g, '').trim();
+    const result = JSON.parse(clean);
+    renderResults(result);
+
+  } catch (err) {
+    stopLoadingMessages();
+    document.getElementById('loadingState').classList.remove('show');
+    document.getElementById('analyzeBtn').disabled = false;
+    const box = document.getElementById('errorBox');
+    box.textContent = '⚠ ' + (err.message || 'Something went wrong. Please try again.');
+    box.classList.add('show');
+  }
+}
+
+function renderResults(r) {
+  // Confidence chip
+  const chip = document.getElementById('confidenceChip');
+  chip.textContent = (r.confidence || 'medium').toUpperCase() + ' CONFIDENCE';
+  chip.className = 'confidence-chip conf-' + (r.confidence || 'medium');
+
+  // Main location
+  document.getElementById('locName').textContent = r.location_name || 'Unknown';
+  document.getElementById('locCountry').textContent = r.country || '—';
+  document.getElementById('locLat').textContent = r.latitude ? r.latitude + '°' : '—';
+  document.getElementById('locLng').textContent = r.longitude ? r.longitude + '°' : '—';
+  document.getElementById('locContinent').textContent = r.continent || '—';
+
+  // Details
+  document.getElementById('locRegion').textContent = r.region || '—';
+  document.getElementById('locClimate').textContent = r.climate || '—';
+  document.getElementById('locSetting').textContent = (r.setting || '—').charAt(0).toUpperCase() + (r.setting || '').slice(1);
+  document.getElementById('locTime').textContent = r.estimated_time || '—';
+
+  // Landmark
+  const landmarkCard = document.getElementById('landmarkCard');
+  const landmarkVal = document.getElementById('locLandmark');
+  if (r.landmark) {
+    landmarkVal.textContent = r.landmark;
+    landmarkCard.style.display = 'block';
+  } else {
+    landmarkCard.style.display = 'none';
+  }
+
+  // Confidence reason
+  document.getElementById('confReason').textContent = r.confidence_reason || '';
+
+  // Clues
+  const cluesList = document.getElementById('cluesList');
+  cluesList.innerHTML = '';
+  (r.clues || []).forEach(clue => {
+    const div = document.createElement('div');
+    div.className = 'clue-item';
+    div.innerHTML = `<span class="clue-bullet">◆</span><span>${clue}</span>`;
+    cluesList.appendChild(div);
+  });
+
+  // Eliminated regions
+  const elimSection = document.getElementById('elimSection');
+  const elimList = document.getElementById('elimList');
+  elimList.innerHTML = '';
+  if (r.eliminated_regions && r.eliminated_regions.length > 0) {
+    r.eliminated_regions.forEach(e => {
+      const div = document.createElement('div');
+      div.className = 'clue-item';
+      div.innerHTML = `<span class="clue-bullet" style="color:var(--mist)">✕</span><span>${e}</span>`;
+      elimList.appendChild(div);
+    });
+    elimSection.style.display = 'block';
+  } else {
+    elimSection.style.display = 'none';
+  }
+
+  // Narrative
+  document.getElementById('locNarrative').textContent = r.narrative || '—';
+
+  // Map link
+  if (r.latitude && r.longitude) {
+    document.getElementById('mapLink').href =
+      `https://www.google.com/maps?q=${r.latitude},${r.longitude}`;
+  }
+
+  document.getElementById('resultsPanel').classList.add('show');
+  document.getElementById('analyzeBtn').disabled = false;
+  document.getElementById('resultsPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+</script>
+</body>
+</html>  /* ── HEADER ── */
+  header {
+    padding: 48px 0 40px;
+    text-align: center;
+    position: relative;
+  }
+
+  .logo-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--ink);
+    color: var(--paper);
+    padding: 6px 16px 6px 10px;
+    border-radius: 2px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+
+  .logo-badge .dot {
+    width: 8px; height: 8px;
+    background: var(--rust);
+    border-radius: 50%;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(0.85); }
+  }
+
+  h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(42px, 8vw, 72px);
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+
+  h1 em {
+    font-style: italic;
+    color: var(--rust);
+  }
+
+  .tagline {
+    margin-top: 16px;
+    font-size: 15px;
+    color: var(--mist);
+    font-weight: 300;
+    letter-spacing: 0.02em;
+  }
+
+  /* Decorative compass */
+  .compass-ring {
+    position: absolute;
+    top: 20px;
+    right: -20px;
+    width: 100px;
+    height: 100px;
+    opacity: 0.12;
+    animation: spin-slow 30s linear infinite;
+  }
+
+  @keyframes spin-slow {
+    to { transform: rotate(360deg); }
+  }
+
+  /* ── UPLOAD ZONE ── */
+  .upload-section {
+    margin-bottom: 32px;
+  }
+
+  .drop-zone {
+    border: 2px dashed var(--sepia);
+    border-radius: 4px;
+    background: var(--cream);
+    padding: 60px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .drop-zone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, rgba(201, 148, 26, 0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--gold);
+    background: #fdf8ed;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 32px rgba(184, 82, 26, 0.1);
+  }
+
+  .drop-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    display: block;
+    filter: grayscale(0.3);
+  }
+
+  .drop-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 22px;
+    font-weight: 400;
+    color: var(--ink);
+    margin-bottom: 8px;
+  }
+
+  .drop-sub {
+    font-size: 13px;
+    color: var(--mist);
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.04em;
+  }
+
+  #fileInput { display: none; }
+
+  /* ── PREVIEW ── */
+  .preview-wrap {
+    display: none;
+    position: relative;
+    margin-bottom: 20px;
+  }
+
+  .preview-wrap.show { display: block; }
+
+  #previewImg {
+    width: 100%;
+    max-height: 420px;
+    object-fit: cover;
+    border-radius: 3px;
+    border: 1px solid var(--sepia);
+    display: block;
+  }
+
+  .img-overlay-badge {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    background: rgba(15, 14, 12, 0.75);
+    backdrop-filter: blur(8px);
+    color: var(--paper);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 2px;
+    letter-spacing: 0.06em;
+  }
+
+  .change-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: rgba(15, 14, 12, 0.7);
+    backdrop-filter: blur(8px);
+    color: var(--paper);
+    border: none;
+    padding: 6px 14px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    border-radius: 2px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    transition: background 0.2s;
+  }
+
+  .change-btn:hover { background: var(--rust); }
+
+  /* ── ANALYZE BTN ── */
+  .analyze-btn {
+    width: 100%;
+    background: var(--ink);
+    color: var(--paper);
+    border: none;
+    padding: 18px 32px;
+    font-family: 'Playfair Display', serif;
+    font-size: 20px;
+    font-style: italic;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: all 0.25s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    letter-spacing: 0.01em;
+    margin-bottom: 32px;
+  }
+
+  .analyze-btn:hover:not(:disabled) {
+    background: var(--rust);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 24px rgba(184, 82, 26, 0.3);
+  }
+
+  .analyze-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .btn-arrow { font-style: normal; font-size: 22px; }
+
+  /* ── LOADING ── */
+  .loading-state {
+    display: none;
+    text-align: center;
+    padding: 40px 0;
+  }
+
+  .loading-state.show { display: block; }
+
+  .loader-track {
+    width: 200px;
+    height: 2px;
+    background: var(--aged);
+    margin: 0 auto 20px;
+    border-radius: 1px;
+    overflow: hidden;
+  }
+
+  .loader-bar {
+    height: 100%;
+    background: var(--rust);
+    border-radius: 1px;
+    animation: scan 1.8s ease-in-out infinite;
+    width: 40%;
+  }
+
+  @keyframes scan {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(350%); }
+  }
+
+  .loading-text {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--mist);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    animation: blink 1.5s ease-in-out infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* ── RESULTS ── */
+  .results-panel {
+    display: none;
+    animation: rise 0.5s ease-out;
+  }
+
+  .results-panel.show { display: block; }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .results-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .results-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--mist);
+    flex: 1;
+  }
+
+  .confidence-chip {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.06em;
+  }
+
+  .conf-high { background: #d4edda; color: #1a6b2a; }
+  .conf-medium { background: #fff3cd; color: #856404; }
+  .conf-low { background: #fde8d8; color: #8a3315; }
+
+  /* Location card */
+  .location-card {
+    background: var(--ink);
+    color: var(--paper);
+    border-radius: 4px;
+    padding: 28px 32px;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .location-card::before {
+    content: '';
+    position: absolute;
+    top: 0; right: 0;
+    width: 180px; height: 180px;
+    background: radial-gradient(circle, rgba(184,82,26,0.25) 0%, transparent 65%);
+    pointer-events: none;
+  }
+
+  .loc-eyebrow {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--sepia);
+    margin-bottom: 8px;
+  }
+
+  .loc-name {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(24px, 5vw, 40px);
+    font-weight: 700;
+    line-height: 1.1;
+    margin-bottom: 4px;
+  }
+
+  .loc-country {
+    font-size: 15px;
+    color: var(--sepia);
+    font-weight: 300;
+    margin-bottom: 20px;
+    font-family: 'DM Sans', sans-serif;
+  }
+
+  .coords-row {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  .coord-item {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .coord-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--mist);
+  }
+
+  .coord-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 14px;
+    color: var(--gold);
+  }
+
+  /* Detail grid */
+  .detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  @media (max-width: 560px) {
+    .detail-grid { grid-template-columns: 1fr; }
+  }
+
+  .detail-card {
+    background: var(--cream);
+    border: 1px solid var(--aged);
+    border-radius: 3px;
+    padding: 16px 18px;
+  }
+
+  .detail-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--mist);
+    margin-bottom: 6px;
+  }
+
+  .detail-value {
+    font-size: 14px;
+    color: var(--ink);
+    font-weight: 500;
+    line-height: 1.4;
+  }
+
+  /* Clues section */
+  .clues-section {
+    background: var(--cream);
+    border: 1px solid var(--aged);
+    border-radius: 3px;
+    padding: 20px 22px;
+    margin-bottom: 20px;
+  }
+
+  .clues-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--mist);
+    margin-bottom: 14px;
+  }
+
+  .clue-item {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 10px;
+    align-items: flex-start;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .clue-item:last-child { margin-bottom: 0; }
+
+  .clue-bullet {
+    color: var(--rust);
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  /* Narrative */
+  .narrative-section {
+    border-left: 3px solid var(--sepia);
+    padding: 0 0 0 20px;
+    margin-bottom: 24px;
+  }
+
+  .narrative-text {
+    font-family: 'Playfair Display', serif;
+    font-size: 16px;
+    line-height: 1.7;
+    color: #3d3628;
+    font-style: italic;
+  }
+
+  /* Map link */
+  .map-link-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--sky);
+    color: white;
+    padding: 11px 22px;
+    border-radius: 3px;
+    text-decoration: none;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transition: all 0.2s;
+    border: none;
+    cursor: pointer;
+  }
+
+  .map-link-btn:hover {
+    background: #2d5470;
+    transform: translateY(-1px);
+  }
+
+  /* Try again */
+  .try-again-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    color: var(--mist);
+    padding: 11px 22px;
+    border-radius: 3px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border: 1px solid var(--aged);
+    margin-left: 10px;
+    transition: all 0.2s;
+  }
+
+  .try-again-btn:hover {
+    border-color: var(--sepia);
+    color: var(--ink);
+  }
+
+  /* Error */
+  .error-box {
+    display: none;
+    background: #fde8d8;
+    border: 1px solid #e8b49a;
+    border-radius: 3px;
+    padding: 16px 20px;
+    font-size: 14px;
+    color: #6b2a10;
+    margin-bottom: 20px;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .error-box.show { display: block; }
+
+  /* Footer */
+  footer {
+    text-align: center;
+    padding-top: 40px;
+    border-top: 1px solid var(--aged);
+    margin-top: 60px;
+  }
+
+  .footer-text {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--sepia);
+    letter-spacing: 0.06em;
+  }
+
+  /* Divider */
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--sepia), transparent);
+    margin: 28px 0;
+    opacity: 0.4;
+  }
+
+  /* Action row */
+  .action-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-wrap">
+  <header>
+    <svg class="compass-ring" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="50" cy="50" r="45" stroke="#0f0e0c" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <circle cx="50" cy="50" r="35" stroke="#0f0e0c" stroke-width="0.5"/>
+      <text x="50" y="12" text-anchor="middle" font-size="8" fill="#0f0e0c" font-family="serif">N</text>
+      <text x="88" y="53" text-anchor="middle" font-size="8" fill="#0f0e0c" font-family="serif">E</text>
+      <text x="50" y="94" text-anchor="middle" font-size="8" fill="#0f0e0c" font-family="serif">S</text>
+      <text x="12" y="53" text-anchor="middle" font-size="8" fill="#0f0e0c" font-family="serif">W</text>
+      <line x1="50" y1="18" x2="50" y2="38" stroke="#b8521a" stroke-width="2"/>
+      <line x1="50" y1="62" x2="50" y2="82" stroke="#0f0e0c" stroke-width="1.5"/>
+      <circle cx="50" cy="50" r="3" fill="#b8521a"/>
+    </svg>
+
+    <div class="logo-badge">
+      <span class="dot"></span>
+      Taken · AI Location Analysis
+    </div>
+
     <h1><em>Where was this photo taken?</em></h1>
     <p class="tagline" style="font-size:17px; color: var(--ink); margin-bottom:6px; font-weight:400;">Taken Can make mistakes, so double-check again. </p>
     <p class="tagline">Upload any image · AI reads the visual clues · Pinpoints the location</p>
